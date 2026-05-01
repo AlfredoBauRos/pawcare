@@ -448,21 +448,12 @@ export default function App() {
   const [caretakers, setCaretakers] = useState([]);
   useEffect(() => {
     const fetchCaretakers = async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("role", "caretaker");
-      if (data) {
-        const formatted = data.map(c => ({
-          ...c,
-          services: Array.isArray(c.services) ? c.services : ["walk"],
-          rating: c.rating || 5.0,
-          reviews: c.reviews || 0
-        }));
-        setCaretakers(formatted);
-      }
+      const { data, error } = await supabase.from("profiles").select("*").eq("role", "caretaker");
+      if (error) console.error("Error:", error);
+      if (data) setCaretakers(data);
     };
     fetchCaretakers();
   }, []);
-  const [profile, setProfile] = useState(null);
-  const [page, setPage] = useState("home");
   const [modal, setModal] = useState(null);
   const [toastMsg, setToastMsg] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
