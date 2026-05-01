@@ -1,5 +1,6 @@
+```jsx
 import { useState, useEffect } from "react";
-import { supabase, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, getProfile } from "./supabase.js";
+import { supabase, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut } from "./supabase.js";
 
 const COLORS = {
   cream: "#FDF6EC", warm: "#F5E6D0", amber: "#E8A44A", amberDark: "#C8872A",
@@ -63,7 +64,7 @@ const Toast = ({ msg, onClose }) => {
   return <div className="toast">✅ {msg}</div>;
 };
 
-const Navbar = ({ page, setPage, user, onSignOut, setModal }) => (
+const Navbar = ({ page, setPage, user, profile, onSignOut, setModal }) => (
   <nav style={{position:"sticky",top:0,zIndex:100,background:"rgba(253,246,236,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #EAD9C4",padding:"0 24px"}}>
     <div style={{maxWidth:1200,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
       <div onClick={() => setPage("home")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
@@ -78,7 +79,9 @@ const Navbar = ({ page, setPage, user, onSignOut, setModal }) => (
       <div style={{display:"flex",alignItems:"center",gap:12}}>
         {user ? (
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:14,fontWeight:500}}>{user.email?.split("@")[0]}</span>
+            <span onClick={() => setPage("dashboard")} style={{fontSize:14,fontWeight:500,cursor:"pointer",color:"#E8A44A"}}>
+              {profile?.role === "carer" ? "🧑‍⚕️" : "🏠"} {user.email?.split("@")[0]}
+            </span>
             <button className="btn-secondary" style={{padding:"6px 14px",fontSize:13}} onClick={onSignOut}>Salir</button>
           </div>
         ) : (
@@ -95,14 +98,11 @@ const Navbar = ({ page, setPage, user, onSignOut, setModal }) => (
 const AuthModal = ({ type, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [form, setForm] = useState({ email:"", password:"", name:"" });
+  const [form, setForm] = useState({ email:"", password:"", name:"", role:"owner" });
   const [error, setError] = useState("");
   const [mode, setMode] = useState(type);
 
-  const handleGoogle = async () => {
-    setGoogleLoading(true);
-    await signInWithGoogle();
-  };
+  const handleGoogle = async () => { setGoogleLoading(true); await signInWithGoogle(); };
 
   const handleSubmit = async () => {
     setError(""); setLoading(true);
@@ -111,9 +111,10 @@ const AuthModal = ({ type, onClose, onSuccess }) => {
       if (error) { setError("Email o contraseña incorrectos"); setLoading(false); return; }
       onSuccess(data.user);
     } else {
-      const { data, error } = await signUpWithEmail(form.email, form.password, { full_name: form.name });
+      if (!form.name) { setError("Ingresa tu nombre"); setLoading(false); return; }
+      const { data, error } = await signUpWithEmail(form.email, form.password, { full_name: form.name, role: form.role });
       if (error) { setError(error.message); setLoading(false); return; }
-      onSuccess(data.user);
+      if (data.user) onSuccess(data.user, form.role);
     }
     setLoading(false);
   };
@@ -126,21 +127,38 @@ const AuthModal = ({ type, onClose, onSuccess }) => {
           <div style={{fontSize:40,marginBottom:8}}>🐾</div>
           <h2 style={{fontSize:26}}>{mode === "login" ? "Bienvenido de nuevo" : "Únete a PawCare"}</h2>
         </div>
+
+        {mode === "register" && (
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {[["owner","🏠 Soy dueño"],["carer","🧑‍⚕️ Soy cuidador"]].map(([v,l]) => (
+              <button key={v} onClick={() => setForm(f=>({...f,role:v}))}
+                style={{flex:1,padding:"10px",borderRadius:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,border:`2px solid ${form.role===v?"#E8A44A":"#EAD9C4"}`,background:form.role===v?"#FEF3E2":"white",color:form.role===v?"#C8872A":"#8A7A6A"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
+
         <button onClick={handleGoogle} disabled={googleLoading} style={{width:"100%",padding:"12px",borderRadius:12,border:"2px solid #EAD9C4",background:"white",display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontSize:15,fontWeight:600,fontFamily:"'DM Sans',sans-serif",cursor:"pointer",marginBottom:16}}>
           {googleLoading ? <Spinner /> : <><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continuar con Google</>}
         </button>
+
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <div style={{flex:1,height:1,background:"#EAD9C4"}} /><span style={{fontSize:13,color:"#8A7A6A"}}>o con email</span><div style={{flex:1,height:1,background:"#EAD9C4"}} />
         </div>
+
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
           {mode !== "login" && <input className="input-field" placeholder="Nombre completo" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} />}
           <input className="input-field" placeholder="Email" type="email" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} />
           <input className="input-field" placeholder="Contraseña" type="password" value={form.password} onChange={e => setForm(f=>({...f,password:e.target.value}))} onKeyDown={e => e.key==="Enter" && handleSubmit()} />
         </div>
+
         {error && <div style={{padding:"10px 14px",background:"#FEE2E2",borderRadius:10,color:"#B91C1C",fontSize:13,marginBottom:12}}>⚠️ {error}</div>}
+
         <button className="btn-primary" style={{width:"100%",padding:"14px",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={handleSubmit} disabled={loading}>
           {loading ? <Spinner /> : (mode === "login" ? "Entrar" : "Crear cuenta gratis")}
         </button>
+
         <p style={{textAlign:"center",marginTop:14,fontSize:14,color:"#8A7A6A"}}>
           {mode === "login" ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}{" "}
           <span onClick={() => setMode(mode==="login"?"register":"login")} style={{color:"#E8A44A",cursor:"pointer",fontWeight:600}}>
@@ -157,7 +175,7 @@ const CaretakerCard = ({ c, onSelect }) => (
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
       <div style={{display:"flex",gap:12,alignItems:"center"}}>
         <div style={{position:"relative"}}>
-          <Avatar emoji={c.avatar} size={52} />
+          <div style={{width:52,height:52,borderRadius:"50%",background:"#F5E6D0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{c.avatar}</div>
           {c.verified && <div style={{position:"absolute",bottom:-2,right:-2,background:"#7BAE8A",borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"white"}}>✓</div>}
         </div>
         <div>
@@ -192,7 +210,98 @@ const CaretakerCard = ({ c, onSelect }) => (
   </div>
 );
 
-const HomePage = ({ setPage, setModal, user }) => (
+const OwnerDashboard = ({ user, setPage }) => (
+  <div style={{maxWidth:900,margin:"0 auto",padding:"40px 24px"}}>
+    <h1 style={{fontSize:32,marginBottom:8}}>Hola, {user.email?.split("@")[0]} 🐾</h1>
+    <p style={{color:"#8A7A6A",marginBottom:32}}>Panel de dueño de mascota</p>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:32}}>
+      {[["🐾","Mis mascotas","0 registradas"],["📅","Reservas","0 activas"],["❤️","Favoritos","0 cuidadores"]].map(([i,t,s])=>(
+        <div key={t} style={{background:"white",borderRadius:16,padding:20,border:"1px solid #EAD9C4"}}>
+          <div style={{fontSize:28,marginBottom:8}}>{i}</div>
+          <div style={{fontWeight:700,fontSize:16}}>{t}</div>
+          <div style={{fontSize:13,color:"#8A7A6A"}}>{s}</div>
+        </div>
+      ))}
+    </div>
+    <div style={{background:"white",borderRadius:20,padding:28,border:"1px solid #EAD9C4",textAlign:"center"}}>
+      <div style={{fontSize:48,marginBottom:12}}>🔍</div>
+      <h3 style={{fontSize:20,marginBottom:8}}>¡Encuentra tu cuidador ideal!</h3>
+      <p style={{color:"#8A7A6A",marginBottom:20}}>Tenemos cuidadores verificados esperando por ti</p>
+      <button className="btn-primary" style={{padding:"12px 28px",fontSize:15}} onClick={() => setPage("cuidadores")}>
+        Buscar cuidadores →
+      </button>
+    </div>
+  </div>
+);
+
+const CarerDashboard = ({ user, setPage }) => {
+  const [form, setForm] = useState({ city:"", price:"", bio:"", services:[] });
+  const [saved, setSaved] = useState(false);
+
+  const toggleService = (id) => setForm(f => ({
+    ...f,
+    services: f.services.includes(id) ? f.services.filter(s=>s!==id) : [...f.services, id]
+  }));
+
+  return (
+    <div style={{maxWidth:900,margin:"0 auto",padding:"40px 24px"}}>
+      <h1 style={{fontSize:32,marginBottom:8}}>Hola, {user.email?.split("@")[0]} 🧑‍⚕️</h1>
+      <p style={{color:"#8A7A6A",marginBottom:32}}>Panel de cuidador</p>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14,marginBottom:32}}>
+        {[["💰","Ganancias","€0 este mes"],["📅","Reservas","0 activas"],["⭐","Valoración","Sin reseñas"]].map(([i,t,s])=>(
+          <div key={t} style={{background:"white",borderRadius:16,padding:20,border:"1px solid #EAD9C4"}}>
+            <div style={{fontSize:28,marginBottom:8}}>{i}</div>
+            <div style={{fontWeight:700,fontSize:16}}>{t}</div>
+            <div style={{fontSize:13,color:"#8A7A6A"}}>{s}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{background:"white",borderRadius:20,padding:28,border:"1px solid #EAD9C4"}}>
+        <h3 style={{fontSize:20,marginBottom:20}}>Completa tu perfil</h3>
+
+        <div style={{display:"grid",gap:14,marginBottom:20}}>
+          <div>
+            <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:6}}>Ciudad</label>
+            <input className="input-field" placeholder="Ej: Madrid, Barcelona..." value={form.city} onChange={e=>setForm(f=>({...f,city:e.target.value}))} />
+          </div>
+          <div>
+            <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:6}}>Precio por hora (€)</label>
+            <input className="input-field" placeholder="Ej: 15" type="number" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} />
+          </div>
+          <div>
+            <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:6}}>Sobre ti</label>
+            <textarea className="input-field" placeholder="Cuéntanos tu experiencia con mascotas..." value={form.bio} onChange={e=>setForm(f=>({...f,bio:e.target.value}))} style={{resize:"none",height:100}} />
+          </div>
+          <div>
+            <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:10}}>Servicios que ofreces</label>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {SERVICES.map(s => (
+                <button key={s.id} onClick={() => toggleService(s.id)}
+                  style={{padding:"8px 14px",borderRadius:20,border:`2px solid ${form.services.includes(s.id)?"#E8A44A":"#EAD9C4"}`,background:form.services.includes(s.id)?"#FEF3E2":"white",fontSize:13,cursor:"pointer",color:form.services.includes(s.id)?"#C8872A":"#8A7A6A",fontWeight:form.services.includes(s.id)?600:400}}>
+                  {s.icon} {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {saved ? (
+          <div style={{padding:16,background:"#E8F5ED",borderRadius:12,textAlign:"center",color:"#5A8A6A",fontWeight:600}}>
+            ✅ ¡Perfil guardado! Ya apareces en las búsquedas.
+          </div>
+        ) : (
+          <button className="btn-primary" style={{width:"100%",padding:"14px",fontSize:15}} onClick={() => setSaved(true)}>
+            Guardar perfil
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const HomePage = ({ setPage, setModal }) => (
   <div>
     <section style={{minHeight:"88vh",display:"flex",alignItems:"center",padding:"60px 24px",background:"linear-gradient(135deg,#FDF6EC 0%,#F5E6D0 100%)"}}>
       <div style={{maxWidth:700,margin:"0 auto",textAlign:"center"}}>
@@ -204,12 +313,8 @@ const HomePage = ({ setPage, setModal, user }) => (
           Conectamos dueños con cuidadores verificados. Paseos, guardería, hospedaje y más.
         </p>
         <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
-          <button className="btn-primary" style={{padding:"14px 32px",fontSize:16}} onClick={() => setPage("cuidadores")}>
-            Buscar cuidador →
-          </button>
-          <button className="btn-secondary" style={{padding:"14px 24px",fontSize:16}} onClick={() => setModal("register")}>
-            Ser cuidador
-          </button>
+          <button className="btn-primary" style={{padding:"14px 32px",fontSize:16}} onClick={() => setPage("cuidadores")}>Buscar cuidador →</button>
+          <button className="btn-secondary" style={{padding:"14px 24px",fontSize:16}} onClick={() => setModal("register")}>Ser cuidador</button>
         </div>
         <div style={{marginTop:40,display:"flex",gap:32,justifyContent:"center",flexWrap:"wrap"}}>
           {[["🛡️","Seguro incluido"],["✅","Cuidadores verificados"],["⭐","4.9 valoración media"]].map(([i,t])=>(
@@ -253,19 +358,20 @@ const CaretakersPage = ({ user, setModal, toast }) => {
     <div style={{maxWidth:1100,margin:"0 auto",padding:"40px 24px"}}>
       <button onClick={() => setSelected(null)} style={{background:"none",color:"#8A7A6A",fontSize:14,marginBottom:24,fontFamily:"'DM Sans',sans-serif"}}>← Volver</button>
       <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:28}}>
-        <div>
-          <div style={{background:"white",borderRadius:20,padding:28,border:"1px solid #EAD9C4",marginBottom:16}}>
-            <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:16}}>
-              <Avatar emoji={selected.avatar} size={64} />
-              <div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <h2 style={{fontSize:24}}>{selected.full_name}</h2>
-                  {selected.pro && <span className="badge-pro">PRO</span>}
-                </div>
-                <div style={{color:"#8A7A6A",fontSize:14}}>📍 {selected.city} · ⭐ {selected.rating} · ✅ {selected.completed} servicios</div>
+        <div style={{background:"white",borderRadius:20,padding:28,border:"1px solid #EAD9C4"}}>
+          <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:16}}>
+            <div style={{width:64,height:64,borderRadius:"50%",background:"#F5E6D0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{selected.avatar}</div>
+            <div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <h2 style={{fontSize:24}}>{selected.full_name}</h2>
+                {selected.pro && <span className="badge-pro">PRO</span>}
               </div>
+              <div style={{color:"#8A7A6A",fontSize:14}}>📍 {selected.city} · ⭐ {selected.rating} · ✅ {selected.completed} servicios</div>
             </div>
-            <p style={{lineHeight:1.7}}>{selected.bio}</p>
+          </div>
+          <p style={{lineHeight:1.7,marginBottom:16}}>{selected.bio}</p>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {selected.services.map(sid => { const s = SERVICES.find(x=>x.id===sid); return s ? <span key={sid} style={{padding:"6px 12px",borderRadius:20,background:"#F5E6D0",fontSize:13}}>{s.icon} {s.label}</span> : null; })}
           </div>
         </div>
         <div style={{background:"white",borderRadius:20,padding:24,border:"1px solid #EAD9C4",position:"sticky",top:80,height:"fit-content"}}>
@@ -341,6 +447,7 @@ const PricingPage = ({ setModal }) => (
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [page, setPage] = useState("home");
   const [modal, setModal] = useState(null);
   const [toastMsg, setToastMsg] = useState("");
@@ -351,17 +458,32 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) loadProfile(session.user);
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) loadProfile(session.user);
     });
     return () => subscription.unsubscribe();
   }, []);
 
+  const loadProfile = async (u) => {
+    const role = u.user_metadata?.role || "owner";
+    setProfile({ role, full_name: u.user_metadata?.full_name || u.email });
+  };
+
   useEffect(() => { window.scrollTo(0,0); }, [page]);
 
-  const handleSignOut = async () => { await signOut(); setUser(null); setPage("home"); };
+  const handleSignOut = async () => { await signOut(); setUser(null); setProfile(null); setPage("home"); };
+
+  const handleSuccess = (u, role) => {
+    setUser(u);
+    setProfile({ role: role || u.user_metadata?.role || "owner" });
+    setModal(null);
+    toast("¡Bienvenido a PawCare! 🐾");
+    if (role === "carer" || u.user_metadata?.role === "carer") setPage("dashboard");
+  };
 
   if (authLoading) return (
     <div style={{minHeight:"100vh",background:"#FDF6EC",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -376,11 +498,23 @@ export default function App() {
   return (
     <div style={{minHeight:"100vh",background:"#FDF6EC"}}>
       <GlobalStyle />
-      <Navbar page={page} setPage={setPage} user={user} onSignOut={handleSignOut} setModal={setModal} />
+      <Navbar page={page} setPage={setPage} user={user} profile={profile} onSignOut={handleSignOut} setModal={setModal} />
       <main>
-        {page === "home" && <HomePage setPage={setPage} setModal={setModal} user={user} />}
+        {page === "home" && <HomePage setPage={setPage} setModal={setModal} />}
         {page === "cuidadores" && <CaretakersPage user={user} setModal={setModal} toast={toast} />}
         {page === "precios" && <PricingPage setModal={setModal} />}
+        {page === "dashboard" && user && (
+          profile?.role === "carer"
+            ? <CarerDashboard user={user} setPage={setPage} />
+            : <OwnerDashboard user={user} setPage={setPage} />
+        )}
+        {page === "dashboard" && !user && (
+          <div style={{textAlign:"center",padding:"100px 24px"}}>
+            <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+            <p style={{marginBottom:16,color:"#8A7A6A"}}>Debes iniciar sesión</p>
+            <button className="btn-primary" style={{padding:"12px 24px"}} onClick={() => setModal("login")}>Iniciar sesión</button>
+          </div>
+        )}
       </main>
       <footer style={{background:"#2C2416",color:"white",padding:"32px 24px",textAlign:"center"}}>
         <div style={{fontSize:24,marginBottom:8}}>🐾</div>
@@ -388,9 +522,12 @@ export default function App() {
         <p style={{fontSize:13,color:"rgba(255,255,255,.4)"}}>© 2026 PawCare. Todos los derechos reservados.</p>
       </footer>
       {(modal === "login" || modal === "register") && (
-        <AuthModal type={modal} onClose={() => setModal(null)} onSuccess={(u) => { setUser(u); setModal(null); toast("¡Bienvenido a PawCare! 🐾"); }} />
+        <AuthModal type={modal} onClose={() => setModal(null)} onSuccess={handleSuccess} />
       )}
       {toastMsg && <Toast msg={toastMsg} onClose={() => setToastMsg("")} />}
     </div>
   );
 }
+```
+
+Guarda con **Ctrl+S**, cierra el Bloc de notas y dime. 🚀
