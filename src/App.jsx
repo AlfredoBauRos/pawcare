@@ -96,7 +96,6 @@ const Navbar = ({ page, setPage, user, profile, onSignOut, setModal }) => (
 );
 
 const AuthModal = ({ type, onClose, onSuccess }) => {
-  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [form, setForm] = useState({ email:"", password:"", name:"", role:"owner" });
   const [error, setError] = useState("");
@@ -446,7 +445,22 @@ const PricingPage = ({ setModal }) => (
 );
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [caretakers, setCaretakers] = useState([]);
+  useEffect(() => {
+    const fetchCaretakers = async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("role", "caretaker");
+      if (data) {
+        const formatted = data.map(c => ({
+          ...c,
+          services: Array.isArray(c.services) ? c.services : ["walk"],
+          rating: c.rating || 5.0,
+          reviews: c.reviews || 0
+        }));
+        setCaretakers(formatted);
+      }
+    };
+    fetchCaretakers();
+  }, []);
   const [profile, setProfile] = useState(null);
   const [page, setPage] = useState("home");
   const [modal, setModal] = useState(null);
